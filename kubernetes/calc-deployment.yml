@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: calculator
+  name: calculator-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: calculator
+  template:
+    metadata:
+      labels:
+        app: calculator
+    spec:
+      containers:
+        - image: genova.azurecr.io/demoArgo:0.1
+          name: calculator-container
+          ports:
+            - containerPort: 3000
+          resources: {}
+      imagePullSecrets:
+        - name: acr-secret
