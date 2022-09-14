@@ -1,0 +1,15 @@
+{
+    "IMAGE_NAME": "demo-argo",
+    "REPOSITORY_NAME": "demoArgo",
+    "REGISTRY_URL": "genova.azurecr.io",
+    "DEPLOYMENT_FILE": "calc-deployment.yml",
+    "DOCKERFILE_LOCATION": "./src",
+    "INFRA_DIRECTORY": "kubernetes",
+    "INFRA_REPO_NAME": "infrastructure-as-code",
+    "MAIN_BRANCH_NAME": "master",
+    "ENVIRONMENTS": ["Dev", "Qa"],
+    "ENVIRONMENTS_AUTH": {
+        "Dev": ["Pedro-UwU"],
+        "Qa": ["Pedro-UwU"]
+    }
+}

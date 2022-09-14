@@ -1,0 +1,38 @@
+name: Sync-Infra-Folder
+'on':
+  push:
+    branches:
+    - Dev
+    - Qa
+    paths:
+    - kubernetes/**
+jobs:
+  check-if-infra-changed:
+    runs-on: ubuntu-latest
+    outputs:
+      infra-change: ${{ steps.git-diff.outputs.diff }}
+    steps:
+    - name: Get Branch Name
+      id: branch-name
+      run: echo ::set-output name=BRANCH_NAME::$(echo ${GITHUB_REF#refs/heads/})
+    - name: Chekout Repo
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ steps.branch-name.outputs.BRANCH_NAME }}
+    - name: JSON to variables
+      uses: rgarcia-phi/json-to-variables@v1.1.0
+      with:
+        filename: .github/workflows/config.json
+        prefix: CONFIG
+    - name: Commit to Infra Repo
+      uses: cpina/github-action-push-to-another-repository@main
+      env:
+        API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+      with:
+        source-directory: ${{ env.CONFIG_INFRA_DIRECTORY }}
+        destination-github-username: extrimian
+        destination-repository-name: ${{ env.CONFIG_INFRA_REPO_NAME }}
+        user-email: accountservice@extrimian.com
+        target-directory: ${{ env.CONFIG_IMAGE_NAME }}/${{ steps.branch-name.outputs.BRANCH_NAME }}
+        target-branch: master
+        commit-message: 'Proyect ${{ env.CONFIG_IMAGE_NAME }}: Automatic infrastructure folder sync'

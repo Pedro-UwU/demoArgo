@@ -1,0 +1,127 @@
+name: Deploy-Qa
+'on':
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version tag of the image you want to deploy
+        required: true
+jobs:
+  prior-checking:
+    runs-on: ubuntu-latest
+    if: github.actor == 'Pedro-UwU'
+    outputs:
+      prev-deployed: ${{ steps.prev-deployed.outputs.value }}
+    steps:
+    - name: Chekcout repo
+      uses: actions/checkout@v2
+    - name: JSON to varaibles
+      uses: rgarcia-phi/json-to-variables@v1.1.0
+      with:
+        filename: .github/workflows/config.json
+        prefix: CONFIG
+    - name: Checkout Infra Repo
+      uses: actions/checkout@v2
+      with:
+        repository: extrimian/${{ env.CONFIG_INFRA_REPO_NAME }}
+        token: ${{ secrets.API_TOKEN_GITHUB }}
+        ref: refs/heads/master
+    - name: Check If File Exists
+      id: check-file
+      uses: andstor/file-existence-action@v1
+      with:
+        files: ${{ env.CONFIG_IMAGE_NAME }}/tags/${{ github.event.inputs.version }}.json
+    - name: Check if Dev Is Deployed
+      uses: sergeysova/jq-action@v2
+      if: steps.check-file.outputs.files_exists == 'true'
+      id: prev-deployed
+      with:
+        cmd: jq '.Dev' ${{ env.CONFIG_IMAGE_NAME }}/tags/${{ github.event.inputs.version }}.json
+    - name: Check output
+      run: echo ${{ steps.prev-deployed.outputs.value }}
+  mov-new-env-into-tag:
+    runs-on: ubuntu-latest
+    needs:
+    - prior-checking
+    if: needs.prior-checking.outputs.prev-deployed == 'true'
+    steps:
+    - name: Checkout-Repo
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.API_TOKEN_GITHUB }}
+    - name: JSON to variables
+      uses: rgarcia-phi/json-to-variables@v1.1.0
+      with:
+        filename: .github/workflows/config.json
+        prefix: CONFIG
+    - name: Config Git
+      run: |-
+        git config user.name github-actions
+        git config user.email github-actions@github.com
+    - name: Backup Infra Folder
+      run: |-
+        git checkout Qa
+        ls -lah
+        mkdir /home/runner/temp
+        cp -R ${{ env.CONFIG_INFRA_DIRECTORY }} /home/runner/temp
+        ls /home/runner/temp
+    - name: Move Qa to new tag
+      run: |-
+        git checkout ${{ env.CONFIG_MAIN_BRANCH_NAME }}
+        git branch -f Qa ${{ github.event.inputs.version }}
+    - name: Restore Infra Folder
+      run: |-
+        git checkout Qa
+        ls -lah
+        cp -R /home/runner/temp/${{ env.CONFIG_INFRA_DIRECTORY }} .
+        ls -lah
+        cd ${{ env.CONFIG_INFRA_DIRECTORY }}
+        cd ..
+    - name: Install yq
+      uses: mikefarah/yq@v4.15.1
+    - name: Update Infra File
+      run: |-
+        cd ${{ env.CONFIG_INFRA_DIRECTORY }}
+        yq e -i '.spec.template.spec.containers[0].image="${{ env.CONFIG_REGISTRY_URL }}/${{ env.CONFIG_IMAGE_NAME }}:${{ github.event.inputs.version }}"' ${{ env.CONFIG_DEPLOYMENT_FILE }}
+        cat ${{ env.CONFIG_DEPLOYMENT_FILE }}
+        cd ..
+    - name: Commit Changes
+      run: |-
+        git add .
+        git commit -m "Moving Qa to tag ${{ github.event.inputs.version }}"
+        git push --set-upstream origin Qa --force
+  set-infra-repo-deployment:
+    runs-on: ubuntu-latest
+    needs: mov-new-env-into-tag
+    steps:
+    - name: Chekout Repo
+      uses: actions/checkout@v2
+    - name: JSON to variables
+      uses: rgarcia-phi/json-to-variables@v1.1.0
+      with:
+        filename: .github/workflows/config.json
+        prefix: CONFIG
+    - name: Checkout Infra Repo
+      uses: actions/checkout@v2
+      with:
+        repository: extrimian/${{ env.CONFIG_INFRA_REPO_NAME }}
+        token: ${{ secrets.API_TOKEN_GITHUB }}
+        ref: refs/heads/master
+    - name: Set Qa to True
+      uses: sergeysova/jq-action@v2
+      with:
+        cmd: jq '.Qa = true' ${{ env.CONFIG_IMAGE_NAME }}/tags/${{ github.event.inputs.version }}.json > temp.json && mv temp.json ${{ env.CONFIG_IMAGE_NAME }}/tags/${{ github.event.inputs.version }}.json
+    - name: Cat Infra File
+      run: cat ${{ env.CONFIG_IMAGE_NAME }}/tags/${{ github.event.inputs.version }}.json
+    - name: Commit to Infra Repo
+      uses: cpina/github-action-push-to-another-repository@main
+      env:
+        API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+      with:
+        source-directory: ${{ env.CONFIG_IMAGE_NAME }}/tags
+        destination-github-username: extrimian
+        destination-repository-name: ${{ env.CONFIG_INFRA_REPO_NAME }}
+        user-email: accountservice@extrimian.com
+        target-branch: master
+        target-directory: ${{ env.CONFIG_IMAGE_NAME }}/tags
+        commit-message: 'Project ${{ env.CONFIG_IMAGE_NAME }}: Qa deployment of tag ${{ github.event.inputs.version }}'
